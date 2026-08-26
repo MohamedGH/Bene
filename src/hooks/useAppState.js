@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { seedBenevoles, seedProjets } from "../data/seed";
+import { createProject, filterProjects, updateProjectStatus } from "../domain/projects";
+import { createVolunteer, filterVolunteers } from "../domain/volunteers";
+import { isApplication, toggleApplication } from "../domain/applications";
 import { rankProjectsForVolunteer, rankVolunteersForProject } from "../utils/matching";
-import { uid } from "../utils/id";
 
 export default function useAppState() {
   const [projets, setProjets] = useState(seedProjets);
@@ -14,58 +16,84 @@ export default function useAppState() {
   const [benevoleSearch, setBenevoleSearch] = useState("");
   const [statutFiltre, setStatutFiltre] = useState("tous");
 
-  const selectedProjet = projets.find((project) => project.id === selectedProjetId);
-  const selectedBenevole = benevoles.find((volunteer) => volunteer.id === selectedBenevoleId);
+  const selectedProjet = useMemo(
+    () => projets.find((project) => project.id === selectedProjetId),
+    [projets, selectedProjetId]
+  );
+  const selectedBenevole = useMemo(
+    () => benevoles.find((volunteer) => volunteer.id === selectedBenevoleId),
+    [benevoles, selectedBenevoleId]
+  );
 
-  const isCandidat = (projetId, benevoleId) =>
-    candidatures.some((candidate) => candidate.projetId === projetId && candidate.benevoleId === benevoleId);
+  const filteredProjets = useMemo(
+    () => filterProjects(projets, search, statutFiltre),
+    [projets, search, statutFiltre]
+  );
+  const filteredBenevoles = useMemo(
+    () => filterVolunteers(benevoles, benevoleSearch),
+    [benevoles, benevoleSearch]
+  );
+  const rankedForProjet = useMemo(
+    () => (selectedProjet ? rankVolunteersForProject(selectedProjet, benevoles) : []),
+    [selectedProjet, benevoles]
+  );
+  const rankedForBenevole = useMemo(
+    () => (selectedBenevole ? rankProjectsForVolunteer(selectedBenevole, projets) : []),
+    [selectedBenevole, projets]
+  );
 
-  const toggleCandidature = (projetId, benevoleId) => {
-    setCandidatures((current) =>
-      isCandidat(projetId, benevoleId)
-        ? current.filter((candidate) => !(candidate.projetId === projetId && candidate.benevoleId === benevoleId))
-        : [...current, { id: uid(), projetId, benevoleId }]
-    );
+  const selectProjet = (id) => {
+    setSelectedProjetId(id);
+    setView("projetDetail");
   };
 
-  const setProjetStatut = (projetId, statut) => {
-    setProjets((current) => current.map((project) => project.id === projetId ? { ...project, statut } : project));
+  const selectBenevole = (id) => {
+    setSelectedBenevoleId(id);
+    setView("benevoleDetail");
   };
 
   const addProjet = (project) => {
-    setProjets((current) => [{ ...project, id: uid(), statut: "ouvert" }, ...current]);
+    setProjets((current) => [createProject(project), ...current]);
     setView("projets");
   };
 
   const addBenevole = (volunteer) => {
-    setBenevoles((current) => [{ ...volunteer, id: uid() }, ...current]);
+    setBenevoles((current) => [createVolunteer(volunteer), ...current]);
     setView("benevoles");
   };
 
-  const filteredProjets = useMemo(() => {
-    const query = search.toLowerCase();
-    return projets
-      .filter((project) => project.titre.toLowerCase().includes(query) || project.competences.some((skill) => skill.toLowerCase().includes(query)))
-      .filter((project) => statutFiltre === "tous" || project.statut === statutFiltre);
-  }, [projets, search, statutFiltre]);
+  const toggleCandidature = (projetId, benevoleId) => {
+    setCandidatures((current) => toggleApplication(current, projetId, benevoleId));
+  };
 
-  const filteredBenevoles = useMemo(() => {
-    const query = benevoleSearch.toLowerCase();
-    return benevoles.filter((volunteer) => volunteer.nom.toLowerCase().includes(query) || volunteer.competences.some((skill) => skill.toLowerCase().includes(query)));
-  }, [benevoles, benevoleSearch]);
-
-  const rankedForProjet = useMemo(() => selectedProjet ? rankVolunteersForProject(selectedProjet, benevoles) : [], [selectedProjet, benevoles]);
-  const rankedForBenevole = useMemo(() => selectedBenevole ? rankProjectsForVolunteer(selectedBenevole, projets) : [], [selectedBenevole, projets]);
+  const setProjetStatut = (projetId, statut) => {
+    setProjets((current) => updateProjectStatus(current, projetId, statut));
+  };
 
   return {
-    projets, benevoles, candidatures, view, setView,
-    selectedProjet, selectedBenevole,
-    search, setSearch, benevoleSearch, setBenevoleSearch,
-    statutFiltre, setStatutFiltre,
-    filteredProjets, filteredBenevoles,
-    rankedForProjet, rankedForBenevole,
-    isCandidat, toggleCandidature, setProjetStatut, addProjet, addBenevole,
-    selectProjet: (id) => { setSelectedProjetId(id); setView("projetDetail"); },
-    selectBenevole: (id) => { setSelectedBenevoleId(id); setView("benevoleDetail"); },
+    projets,
+    benevoles,
+    candidatures,
+    view,
+    setView,
+    selectedProjet,
+    selectedBenevole,
+    search,
+    setSearch,
+    benevoleSearch,
+    setBenevoleSearch,
+    statutFiltre,
+    setStatutFiltre,
+    filteredProjets,
+    filteredBenevoles,
+    rankedForProjet,
+    rankedForBenevole,
+    isCandidat: (projetId, benevoleId) => isApplication(candidatures, projetId, benevoleId),
+    toggleCandidature,
+    setProjetStatut,
+    addProjet,
+    addBenevole,
+    selectProjet,
+    selectBenevole,
   };
 }
